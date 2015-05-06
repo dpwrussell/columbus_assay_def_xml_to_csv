@@ -44,29 +44,23 @@ assay_definition = tree.getroot()
 # Find the wells
 wells = assay_definition.find('Wells')
 
-rows = []
-for well in wells.iter('Well'):
-    # Get all the Content elements for this well
-    for content in well.iter("Content"):
-        for content_value in content.iter("Value"):
-            row = [ well.get('WellID'),
-                    content.get('ContentID'),
-                    content_value.text ]
-
-            # If the content has Type and Units, add those
-            content_type = content_value.get('Type')
-            if content_type is not None:
-                row.append(content_type)
-            content_unit = content_value.get('Unit')
-            if content_unit is not None:
-                row.append(content_unit)
-
-            rows.append(row)
-
 # Write the CSV File
 with open('outfile.csv', 'wb') as csvfile:
     row_writer = UnicodeWriter(csvfile, quoting=csv.QUOTE_NONE)
     row_writer.writerow(['WellID', 'Content', 'Value',
                          'Type (if exists for Content)',
                          'Unit (if exists for Content)'])
-    row_writer.writerows(rows)
+
+    for well in wells.iter('Well'):
+        # Get all the Content elements for this well
+        for content in well.iter("Content"):
+            for content_value in content.iter("Value"):
+                row = [ well.get('WellID'),
+                        content.get('ContentID'),
+                        content_value.text ]
+
+                # If the content has Type and Units, add those (or None)
+                row.append(content_value.get('Type', ''))
+                row.append(content_value.get('Unit', ''))
+
+                row_writer.writerow(row)
