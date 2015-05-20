@@ -52,6 +52,12 @@ def convert_file(filename):
 
     # Look for each of the drugs and create a list of rows
 
+    drug_aliases = {}
+
+    # Map drug "names" to the aliases (the real names)
+    for drug in drugs:
+        drug_aliases[drug.get('ID')] = drug[0].text
+
     drug_names = ' or '.join(["@ContentID='%s'" % drug.get('ID')
                              for drug in drugs])
 
@@ -62,7 +68,7 @@ def convert_file(filename):
     # Write the CSV File
     with open('%s.csv' % filename, 'wb') as csvfile:
         row_writer = UnicodeWriter(csvfile, quoting=csv.QUOTE_NONE)
-        row_writer.writerow(['WellID', 'Sample Type', 'Cell Type',
+        row_writer.writerow(['Well', 'Sample Type', 'Cell Type',
                              'Drug', 'Value', 'Unit'])
 
         for drug_value in drug_values:
@@ -92,9 +98,12 @@ def convert_file(filename):
                 print 'Value can not be None'
                 exit(1)
 
+            # Lookup drug name for alias
+            drug_alias = drug_aliases[content.get('ContentID')]
+
             # Note: Unit can be None and is simply replaced with 'N/A'
             row = [well.get('WellID'), control.text, celltype.text,
-                   content.get('ContentID'), drug_value.text,
+                   drug_alias, drug_value.text,
                    drug_value.get('Unit', 'N/A')]
 
             # write row
