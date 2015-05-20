@@ -1,7 +1,12 @@
 #!/usr/bin/env python
 
-import xml.etree.ElementTree as ET
+from lxml import etree
+from argparse import ArgumentParser
 import csv, codecs, cStringIO
+
+# Configure argument parsing
+parser = ArgumentParser(description='Convert Columbus XML to CSV')
+parser.add_argument("files", nargs="*")
 
 class UnicodeWriter:
     """
@@ -35,32 +40,70 @@ class UnicodeWriter:
 # Define the namespace
 namespaces = {'Columbus': 'http://www.perkinelmer.com/Columbus'}
 
-# Parse the input file
-tree = ET.parse('2015-01-18 plate map_2-2.xml')
+def convert_file(filename):
+    # Parse the input file
+    tree = etree.parse(filename)
 
-# Get the root of the tree
-assay_definition = tree.getroot()
+    # Use the registration to get the drug names
 
-# Find the wells
-wells = assay_definition.find('Wells')
+    drugs = tree.xpath(
+        "Columbus:Registration/Columbus:Content[@GroupName='Drug']",
+        namespaces=namespaces)
 
-# Write the CSV File
-with open('outfile.csv', 'wb') as csvfile:
-    row_writer = UnicodeWriter(csvfile, quoting=csv.QUOTE_NONE)
-    row_writer.writerow(['WellID', 'Content', 'Value',
-                         'Type (if exists for Content)',
-                         'Unit (if exists for Content)'])
+    # Look for each of the drugs and create a list of rows
 
-    for well in wells.iter('Well'):
-        # Get all the Content elements for this well
-        for content in well.iter("Content"):
-            for content_value in content.iter("Value"):
-                row = [ well.get('WellID'),
-                        content.get('ContentID'),
-                        content_value.text ]
+    drug_names = ' or '.join(["@ContentID='%s'" % drug.get('ID')
+                             for drug in drugs])
 
-                # If the content has Type and Units, add those (or None)
-                row.append(content_value.get('Type', ''))
-                row.append(content_value.get('Unit', ''))
+    drug_values = tree.xpath(
+        "//Columbus:Well/Columbus:Content[%s]/Columbus:Value" % drug_names,
+        namespaces=namespaces)
 
-                row_writer.writerow(row)
+    # Write the CSV File
+    with open('%s.csv' % filename, 'wb') as csvfile:
+        row_writer = UnicodeWriter(csvfile, quoting=csv.QUOTE_NONE)
+        row_writer.writerow(['WellID', 'Sample Type', 'Cell Type',
+                             'Drug', 'Value', 'Unit'])
+
+        for drug_value in drug_values:
+            content = drug_value.getparent()
+            well = content.getparent()
+            control = well.xpath(
+                "Columbus:Content[@ContentID='Control_2']/Columbus:Value",
+                namespaces=namespaces)[0]
+            celltype = well.xpath(
+                "Columbus:Content[@ContentID='Celltype_3']/Columbus:Value",
+                namespaces=namespaces)[0]
+
+            # Require that none of these fields are None
+            if well.get('WellID') is None:
+                print 'WellID can not be None'
+                exit(1)
+            if control.text is None:
+                print 'Sample Type can not be None'
+                exit(1)
+            if celltype.text is None:
+                print 'Cell Type can not be None'
+                exit(1)
+            if content.get('ContentID') is None:
+                print 'Drug can not be None'
+                exit(1)
+            if drug_value.text is None:
+                print 'Value can not be None'
+                exit(1)
+
+            # Note: Unit can be None and is simply replaced with 'N/A'
+            row = [well.get('WellID'), control.text, celltype.text,
+                   content.get('ContentID'), drug_value.text,
+                   drug_value.get('Unit', 'N/A')]
+
+            # write row
+            row_writer.writerow(row)
+
+def main():
+    args = parser.parse_args()
+    for f in args.files:
+        convert_file(f)
+
+if __name__ == "__main__":
+    main()
