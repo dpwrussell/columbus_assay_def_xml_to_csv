@@ -102,7 +102,7 @@ def convert_file(filename):
             drug_alias = drug_aliases[content.get('ContentID')]
 
             # Note: Unit can be None and is simply replaced with 'N/A'
-            row = [well.get('WellID'), control.text, celltype.text,
+            row = [well.get('WellID').upper(), control.text, celltype.text,
                    drug_alias, drug_value.text,
                    drug_value.get('Unit', 'N/A')]
 
