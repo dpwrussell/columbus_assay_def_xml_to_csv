@@ -66,46 +66,75 @@ def convert_file(filename):
         "//Columbus:Well/Columbus:Content[%s]/Columbus:Value" % drug_names,
         namespaces=namespaces)
 
+    drug_names_not = ' and '.join(["not(@ContentID='%s')" % drug.get('ID')
+                                  for drug in drugs])
+
+    data = {}
+    other_headers = set([])
+
+    # Get the drug in any well which has a drug value
+    for drug_value in drug_values:
+        content = drug_value.getparent()
+        # Get the well that this drug is in
+        well = content.getparent()
+
+        # Some basic tests of data integrity
+        if well.get('WellID') is None:
+            print 'WellID can not be None'
+            exit(1)
+        if drug_value.text is None:
+            print 'Value can not be None'
+            exit(1)
+        if content.get('ContentID') is None:
+            print 'Drug can not be None'
+            exit(1)
+
+        # Lookup drug name for alias
+        try:
+            drug_alias = drug_aliases[content.get('ContentID')]
+        except KeyError as e:
+            print 'Drug must be present in the registration data'
+            exit(1)
+
+        # Create a store of all the data which has been parsed
+        data[well.get('WellID')] = {
+            'drug': drug_alias,
+            'value': drug_value.text,
+            # Note: Unit can be None
+            'unit': drug_value.get('Unit', ''),
+            'other': {}
+        }
+
+        # Determine what other Content columns there are which
+        # are not drugs
+        other_columns = well.xpath(
+            "Columbus:Content[%s]" % drug_names_not,
+            namespaces=namespaces)
+
+        for other_column in other_columns:
+            other_column_name = other_column.get('ContentID').split('_')[0]
+            other_headers.add(other_column_name)
+            value = other_column.xpath("Columbus:Value/text()[1]",
+                                       namespaces=namespaces)[0]
+            data[well.get('WellID')]['other'][other_column_name] = value
+
+
+
     # Write the CSV File
     with open('%s.csv' % filename, 'wb') as csvfile:
         row_writer = UnicodeWriter(csvfile, quoting=csv.QUOTE_NONE)
-        row_writer.writerow(['Well', 'Sample Type', 'Cell Type',
-                             'Drug', 'Value', 'Unit'])
 
-        for drug_value in drug_values:
-            content = drug_value.getparent()
-            well = content.getparent()
-            control = well.xpath(
-                "Columbus:Content[@ContentID='Control_2']/Columbus:Value",
-                namespaces=namespaces)[0]
-            celltype = well.xpath(
-                "Columbus:Content[@ContentID='Celltype_3']/Columbus:Value",
-                namespaces=namespaces)[0]
+        header = ['Well', 'Drug', 'Value', 'Unit']
+        header.extend(other_headers)
+        row_writer.writerow(header)
 
-            # Require that none of these fields are None
-            if well.get('WellID') is None:
-                print 'WellID can not be None'
-                exit(1)
-            if control.text is None:
-                print 'Sample Type can not be None'
-                exit(1)
-            if celltype.text is None:
-                print 'Cell Type can not be None'
-                exit(1)
-            if content.get('ContentID') is None:
-                print 'Drug can not be None'
-                exit(1)
-            if drug_value.text is None:
-                print 'Value can not be None'
-                exit(1)
+        for well, well_data in data.iteritems():
+            row = [well, well_data['drug'],
+                   well_data['value'],
+                   well_data['unit']]
 
-            # Lookup drug name for alias
-            drug_alias = drug_aliases[content.get('ContentID')]
-
-            # Note: Unit can be None and is simply replaced with 'N/A'
-            row = [well.get('WellID').upper(), control.text, celltype.text,
-                   drug_alias, drug_value.text,
-                   drug_value.get('Unit', 'N/A')]
+            for other_header in other_headers:
+                row.append(well_data['other'].get(other_header, ''))
 
             # write row
             row_writer.writerow(row)
