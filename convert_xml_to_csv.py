@@ -47,7 +47,8 @@ def convert_file(filename):
     # Use the registration to get the drug names
 
     drugs = tree.xpath(
-        "Columbus:Registration/Columbus:Content[@GroupName='Drug']",
+        """Columbus:Registration/Columbus:Content[@GroupName='Drug'
+                                                  or @GroupName='drug']""",
         namespaces=namespaces)
 
     # Look for each of the drugs and create a list of rows
